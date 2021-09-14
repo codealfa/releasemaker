@@ -287,7 +287,6 @@ class ArsFof implements ARSInterface
 	private function doApiCall(array $postData = [])
 	{
 		$arsData = [
-			'option'             => 'com_ars',
 			'_fofauthentication' => \json_encode([
 				'username' => $this->username,
 				'password' => $this->password,
@@ -298,6 +297,7 @@ class ArsFof implements ARSInterface
 
 		$url = \rtrim($this->host, '/');
 		$url = (\substr($url, -4) === '.php') ? $url : ($url . '/index.php');
+		$url .= '?option=com_ars';
 
 		$conf                = Configuration::getInstance();
 		$communicationMethod = $conf->api->connector;
