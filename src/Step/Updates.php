@@ -54,9 +54,13 @@ class Updates extends AbstractStep
 			$joomlaFormat = ($format === 'xml') ? 'xml' : 'ini';
 			$url          = sprintf($urlPattern, $task, $joomlaFormat);
 
+			// The site redirects public update stream requests to static XML files; this user agent lets us reach ARS.
 			$context = \stream_context_create([
 				'http' => [
-					'method' => 'GET',
+					'method'          => 'GET',
+					'user_agent'      => 'AkeebaReleaseMaker/2.0',
+					'follow_location' => 0,
+					'ignore_errors'   => true,
 				],
 				'ssl'  => [
 					'verify_peer'  => true,
@@ -68,6 +72,15 @@ class Updates extends AbstractStep
 
 			if ($data === false)
 			{
+				continue;
+			}
+
+			$statusLine = $http_response_header[0] ?? '';
+
+			if (!preg_match('#^HTTP/\S+\s+200\b#', $statusLine))
+			{
+				$this->io->error(sprintf('Not pushing %s update format: %s returned ‘%s’', $format, $url, $statusLine));
+
 				continue;
 			}
 
