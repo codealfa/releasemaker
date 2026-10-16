@@ -299,6 +299,13 @@ class ArsJoomla implements ARSInterface
 	{
 		$url = rtrim($this->host, '/');
 		$url = (substr($url, -4) === '.php') ? $url : ($url . '/index.php');
+
+		// The endpoint is the site's index.php, which the update streams are read from; the API is beside it.
+		if (substr($url, -14) !== '/api/index.php')
+		{
+			$url = substr($url, 0, -strlen('/index.php')) . '/api/index.php';
+		}
+
 		$url .= '/' . trim($path, '/');
 
 		$conf                = Configuration::getInstance();
