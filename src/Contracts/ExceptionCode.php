@@ -96,6 +96,9 @@ class ExceptionCode
 	// Configuration error: Using the Joomla API application requires using a Joomla! API token
 	public const CONFIG_ARS_JOOMLA_REQUIRES_TOKEN = 119;
 
+	// Configuration error: Invalid public URL of the static changelog file
+	public const CONFIG_INVALID_CHANGELOG_URL = 120;
+
 	// Logic error whcih doesn't fall into any other category. These are logic errors which require fixing the code.
 	public const GENERIC_LOGIC_ERROR = 240;
 

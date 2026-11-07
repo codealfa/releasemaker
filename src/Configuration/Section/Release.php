@@ -30,6 +30,7 @@ use League\CommonMark\GithubFlavoredMarkdownConverter;
  * @property-read  null|string $releaseNotesFile       Absolute filesystem path to the release notes file.
  * @property-read  null|string $changelog              Absolute filesystem path to the changelog file.
  * @property-read  string      $releaseNotes           HTML content for the release notes. Constructed as needed.
+ * @property-read  string      $changelogText          The latest version's CHANGELOG lines, as plain text.
  */
 final class Release implements ConfigurationSection
 {
@@ -49,6 +50,20 @@ final class Release implements ConfigurationSection
 
 	private ?string $releaseNotes = null;
 
+	/**
+	 * CHANGELOG line glyphs Release Maker understands. Lines starting with anything else are ignored.
+	 *
+	 * @since 2.1.0
+	 */
+	private const CHANGELOG_GLYPHS = ['!', '#', '$', '+', '~', '-', '^'];
+
+	/**
+	 * The latest version's CHANGELOG lines, in file order. Null until first read.
+	 *
+	 * @var string[]|null
+	 */
+	private ?array $changelogLines = null;
+
 	/** @noinspection PhpUnusedParameterInspection */
 	public function __construct(array $configuration, Configuration $parent)
 	{
@@ -62,15 +77,15 @@ final class Release implements ConfigurationSection
 		$this->changelog        = $configuration['changelog'] ?? null;
 
 		// Make sure the release notes file exists and is readable. Otherwise don't try to use it.
-		if (!empty($this->releaseNotesFile) || !is_file($this->releaseNotesFile) || !is_readable($this->releaseNotesFile))
+		if (empty($this->releaseNotesFile) || !is_file($this->releaseNotesFile) || !is_readable($this->releaseNotesFile))
 		{
-			$releaseNotesFile = null;
+			$this->releaseNotesFile = null;
 		}
 
 		// Make sure the changelog file exists and is readable. Otherwise don't try to use it.
-		if (!empty($this->changelog) || !is_file($this->changelog) || !is_readable($this->changelog))
+		if (empty($this->changelog) || !is_file($this->changelog) || !is_readable($this->changelog))
 		{
-			$releaseNotesFile = null;
+			$this->changelog = null;
 		}
 
 		// We always need a version
@@ -127,11 +142,11 @@ final class Release implements ConfigurationSection
 		 * Create new release notes with the contents of the release note file and the parsed changelog file, if either
 		 * file was specified. If no file is specified we get an empty string.
 		 */
-		$releaseNotes =
+		$this->releaseNotes =
 			$this->parseReleaseNotesFile($this->releaseNotesFile) .
-			$this->parseChangelog($this->changelog);
+			$this->renderChangelogHtml($this->getChangelogLines());
 
-		return $releaseNotes;
+		return $this->releaseNotes;
 	}
 
 	private function parseReleaseNotesFile(?string $filePath): string
@@ -177,39 +192,70 @@ final class Release implements ConfigurationSection
 		return $converter->convertToHtml($fileContents);
 	}
 
-	private function parseChangelog(?string $filePath): string
+	/**
+	 * Return the latest version's CHANGELOG lines as plain text, one per line, in file order.
+	 *
+	 * This is what ARS stores as the release's changelog and serves to Joomla as its changelog XML.
+	 *
+	 * @return string
+	 * @since  2.1.0
+	 *
+	 * @noinspection PhpUnusedPrivateMethodInspection
+	 */
+	private function getChangelogText(): string
 	{
+		return implode("\n", $this->getChangelogLines());
+	}
+
+	/**
+	 * Return the latest version's lines of the CHANGELOG file, in file order.
+	 *
+	 * The latest version is the first one in the file. Only lines starting with a known glyph followed by
+	 * whitespace are returned. See docs/release.md for the format.
+	 *
+	 * @return string[]
+	 * @since  2.1.0
+	 */
+	private function getChangelogLines(): array
+	{
+		if ($this->changelogLines !== null)
+		{
+			return $this->changelogLines;
+		}
+
+		$this->changelogLines = [];
+		$filePath             = $this->changelog;
+
 		// Make sure the file exists.
 		if (empty($filePath) || !is_file($filePath) || !is_readable($filePath))
 		{
-			return '';
+			return $this->changelogLines;
 		}
 
 		$changelog = @\file($filePath);
 
 		if (!\is_array($changelog) || (\count($changelog) == 0))
 		{
-			return '';
+			return $this->changelogLines;
 		}
 
 		// Remove the first line. It's either the version banner or a PHP die statement.
 		$firstLine = \array_shift($changelog);
-		$hasDie = strpos($firstLine, '<?php') !== false;
+		$hasDie    = strpos($firstLine, '<?php') !== false;
 
 		/**
 		 * Remove the second line. If we had a die() statement it's the version banner. Otherwise it is a separator OR
 		 * the start of the latest version's changelog. Keep it so we can examine.
 		 */
-		$secondLine = \array_shift($changelog);
+		$secondLine = \array_shift($changelog) ?? '';
 
 		/**
 		 * If the file had a die() statement at the very top the second line is definitely the version banner. The THIRD
 		 * line is the separator OR the start of the latest version's changelog. So let's get THIS one to examine.
 		 */
-
 		if ($hasDie)
 		{
-			$secondLine = \array_shift($changelog);
+			$secondLine = \array_shift($changelog) ?? '';
 		}
 
 		/**
@@ -225,7 +271,6 @@ final class Release implements ConfigurationSection
 		}
 
 		// Loop until you find a blank line
-		$thisChangelog = [];
 		$haveNonEmptyLine = false;
 
 		foreach ($changelog as $line)
@@ -250,23 +295,40 @@ final class Release implements ConfigurationSection
 				continue;
 			}
 
-			// Yup. I found a non-empty line! Add it to the CHANGELOG lines to be processed.
+			// Yup. I found a non-empty line!
 			$haveNonEmptyLine = true;
-			$thisChangelog[] = $line;
+
+			// Only keep the lines we understand, so the release notes and ARS' changelog XML list the same entries.
+			if (preg_match('/^(\S)\s+\S/u', $line, $matches) && in_array($matches[1], self::CHANGELOG_GLYPHS, true))
+			{
+				$this->changelogLines[] = $line;
+			}
 		}
 
-		if (empty($thisChangelog))
+		return $this->changelogLines;
+	}
+
+	/**
+	 * Render the latest version's CHANGELOG lines as HTML, grouped by type.
+	 *
+	 * @param   string[]  $lines  The lines returned by getChangelogLines().
+	 *
+	 * @return string
+	 * @since  2.1.0
+	 */
+	private function renderChangelogHtml(array $lines): string
+	{
+		if (empty($lines))
 		{
 			return '';
 		}
 
 		// Sort the array
-		\asort($thisChangelog);
+		\asort($lines);
 
-		// Pick lines by type
+		// Pick lines by type. The order of the keys is the order of the sections in the HTML.
 		$sorted = [
 			'security' => [],
-			'critical' => [],
 			'new'      => [],
 			'removed'  => [],
 			'change'   => [],
@@ -275,111 +337,46 @@ final class Release implements ConfigurationSection
 			'misc'     => [],
 		];
 
-		foreach ($thisChangelog as $line)
+		$glyphToArea = [
+			'!' => 'security',
+			'+' => 'new',
+			'-' => 'removed',
+			'^' => 'change',
+			'#' => 'bugfix',
+			'$' => 'language',
+			'~' => 'misc',
+		];
+
+		$titles = [
+			'security' => 'Security fixes',
+			'new'      => 'New features',
+			'removed'  => 'Removed features',
+			'change'   => 'Noteworthy changes',
+			'bugfix'   => 'Bug fixes',
+			'language' => 'Language fixes or changes',
+			'misc'     => 'Miscellaneous changes',
+		];
+
+		foreach ($lines as $line)
 		{
-			[$type, $text] = \explode(' ', $line, 2);
+			[$type, $text] = preg_split('/\s+/u', $line, 2);
 
-			switch ($type)
-			{
-				case '*':
-					$sorted['security'][] = $text;
-
-					break;
-
-				case '#':
-					$sorted['bugfix'][] = $text;
-
-					break;
-
-				case '$':
-					$sorted['language'][] = $text;
-
-					break;
-
-				case '+':
-					$sorted['new'][] = $text;
-
-					break;
-
-				case '^':
-					$sorted['change'][] = $text;
-
-					break;
-
-				case '~':
-					$sorted['misc'][] = $text;
-
-					break;
-
-				case '-':
-					$sorted['removed'][] = $text;
-
-					break;
-
-				case '!':
-				case '!!':
-					$sorted['critical'][] = $text;
-
-					break;
-			}
+			$sorted[$glyphToArea[$type]][] = $text;
 		}
 
 		// Format the changelog
 		$htmlChangelog = "<h3>Changelog</h3>\n";
 
-		foreach ($sorted as $area => $lines)
+		foreach ($sorted as $area => $areaLines)
 		{
-			if (empty($lines))
+			if (empty($areaLines))
 			{
 				continue;
 			}
 
-			switch ($area)
-			{
-				case 'security':
-					$title = 'Security fixes';
+			$htmlChangelog .= \sprintf("<h4>%s</h4>\n<ul>\n", $titles[$area]);
 
-					break;
-
-				case 'bugfix':
-					$title = 'Bug fixes';
-
-					break;
-
-				case 'language':
-					$title = 'Language fixes or changes';
-
-					break;
-
-				case 'new':
-					$title = 'New features';
-
-					break;
-
-				case 'change':
-					$title = 'Changes';
-
-					break;
-
-				case 'misc':
-					$title = 'Miscellaneous changes';
-
-					break;
-
-				case 'removed':
-					$title = 'Removed features';
-
-					break;
-
-				case 'critical':
-					$title = 'Critical bugs and important changes';
-
-					break;
-			}
-
-			$htmlChangelog .= \sprintf("<h4>%s</h4>\n<ul>\n", $title);
-
-			foreach ($lines as $line)
+			foreach ($areaLines as $line)
 			{
 				$htmlChangelog .= "\t<li>" . \htmlspecialchars($line, ENT_COMPAT, 'UTF-8') . "</li>\n";
 			}

@@ -44,6 +44,7 @@ class Release extends AbstractStep
 		$conf = Configuration::getInstance();
 
 		$release->notes     = $conf->release->releaseNotes;
+		$release->changelog = $conf->release->changelogText;
 		$release->published = 0;
 
 		if (is_null($release->alias))

@@ -71,14 +71,15 @@ If it's not specified the release notes will be empty, notwithstanding the `chan
 
 Absolute filesystem path to a file containing the changelog. If present, it will be parsed and the changelog of the latest release (the **first** one on the file) will be appended to the release notes which will be used for the ARS release.
 
+The same lines are also sent, as plain text, in the ARS release's `changelog` field. ARS serves them to Joomla as changelog XML, and its XML update streams link to it with `<changelogurl>`, so Joomla shows a Changelog button for the update.
+
 The changelog has the following format:
 ```text
 <?php die(); ?>
 Software Name 1.2.3
 ================================================================================
 
-* Security fix
-! Critical fix
+! Security fix
 + New feature
 - Removed feature
 ^ Noteworthy change
@@ -101,8 +102,7 @@ The header is followed by exactly one line called the divider which contains thr
 The divider is followed by zero or more empty lines.
 
 Following the empty lines you have one or more lines with change notes, separated by newlines. The first character of each changelog line determines its context and is used when formatting the changelog. The characters understood by Release Maker are:
-* `*` (star): Security fix. Use when you've fixed a security issue. You should document this in your release notes as well. If it's not possible to do that without tipping the hand of attackers create a page on your site with the minimal set of information possible and a note that the page will be updated in a reasonable amount of time (e.g. after 15 to 30 days). The linked page should also credit the security researcher who reported the issue, if applicable.
-* `!` (exclamation point): Important change. Use when you fix an issue which caused an extremely severe issue affecting most of your clients. You should document this in your release notes as well.
+* `!` (exclamation point): Security fix. Use when you've fixed a security issue. You should document this in your release notes as well. If it's not possible to do that without tipping the hand of attackers create a page on your site with the minimal set of information possible and a note that the page will be updated in a reasonable amount of time (e.g. after 15 to 30 days). The linked page should also credit the security researcher who reported the issue, if applicable.
 * `+` (plus sign) : New feature. Use when you add a new feature to your software. You should document this in your release notes as well.
 * `-` (hyphen): Remove feature. Use when you removed a feature previously present. You should document this in your release notes as well.
 * `^` (caret) : Noteworthy change. Use when you make a change which creates a backwards incompatible situation for your users, or if it requires the user to take action after the upgrade to the new version. You should document this in your release notes as well. 
@@ -110,7 +110,9 @@ Following the empty lines you have one or more lines with change notes, separate
 * `$` (dollar sign): Language file change. This is _not_ meant to document whether language strings are added or removed. It's there to note the addition, removal or major change of translations (language packages / language files).
 * `#` (pound / hash sign): Bug fix. We recommend that you prefix the description of the bug you fixed with an indication of the bug impact (low, medium, high). We start our bugfix changelog lines with `# [HIGH]`, `# [MEDIUM]` or `# [LOW]` to communicate this information.
 
-Lines not starting with any of these characters are _ignored_ and do not appear in the formatted changelog.
+Lines not starting with any of these characters are _ignored_ and do not appear in the formatted changelog, nor in the changelog sent to ARS. The `*` and `!!` glyphs of older Release Maker versions are no longer understood: use `!` for security fixes.
+
+In Joomla's changelog XML, ARS shows `!` as Security Fixes, `#` as Bug Fixes, `$` as Language, `+` as New Features, `~` as Changes, `-` as Removed Features, and `^` as Notes.
 
 You cannot have line breaks in a changelog line. CHANGELOGs are meant to offer a short summary (headlines) of your changes. If you want to convey long information use the release notes. 
 

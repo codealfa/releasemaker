@@ -52,10 +52,24 @@ Base name of the update stream file to upload. Warning: do not include the exten
 
 **Type**: Array of string.
 
-Which update stream formats to upload. One or more of `ini`, `inibare` or `xml`.
+Which update stream formats to upload. One or more of `ini`, `inibare`, `xml` or `changelog`.
 
 ARS supports two update formats, INI and XML. The INI format (deprecated) gives update information for exactly one release, the latest published one. The XML format is Joomla's XML extension update which includes the latest published versions which satisfy every combination of Joomla and PHP you have declared in your environments. It has additional information which convey the PHP compatibility which are not canonical to Joomla's XML update scheme (Joomla just ignores them).
 
 The `ini` and `inibare` formats refer to ARS' INI format updates. The difference is the file extension. With `inibare` there is no file extension, just the `base_name`. With `ini` the file will have a `.ini` extension.
 
 The `xml` format refers to ARS' XML update format. The uploaded file will have a `.xml` extension.
+
+The `changelog` format is the Joomla changelog XML of the stream: one entry for each version in the XML update stream, made from the `changelog` of its release in ARS. Joomla shows it when an administrator clicks Changelog next to an update. The uploaded file is named `base_name` followed by `-changelog.xml`, e.g. `joomla-pro-changelog.xml`. It is uploaded before the other formats. A stream whose releases have no changelog gives an empty `<changelogs/>` document.
+
+## `changelog_url`
+
+**Required**: No
+
+**Type**: String.
+
+The absolute public URL of the uploaded changelog file, e.g. `https://updates.example.com/joomla-pro-changelog.xml`.
+
+ARS links each update in the XML stream to its own changelog endpoint. The uploaded `xml` file is a copy of that stream, so without this key it keeps linking to ARS, which renders the changelog with PHP on every request. With this key, and `changelog` in `formats`, Release Maker replaces every `<changelogurl>` in the uploaded `xml` file with this URL. It only does so once the changelog file has been uploaded in the same run. Otherwise the stream keeps the working ARS link.
+
+Use the same URL for the `<changelogurl>` in your extension's installation manifest, so Joomla's Manage Extensions page shows the changelog too.

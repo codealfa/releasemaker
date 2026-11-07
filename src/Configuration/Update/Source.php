@@ -10,6 +10,7 @@ namespace Akeeba\ReleaseMaker\Configuration\Update;
 
 use Akeeba\ReleaseMaker\Configuration\Configuration;
 use Akeeba\ReleaseMaker\Contracts\Uploader;
+use Akeeba\ReleaseMaker\Exception\InvalidChangelogUrl;
 use Akeeba\ReleaseMaker\Exception\InvalidConnectionKey;
 use Akeeba\ReleaseMaker\Exception\InvalidUpdateFormat;
 use Akeeba\ReleaseMaker\Exception\InvalidUpdateStream;
@@ -23,7 +24,8 @@ use Akeeba\ReleaseMaker\Mixin\MagicGetterAware;
  * @property-read string|null $directory      The directory override for the connection.
  * @property-read int         $stream         ARS update stream ID.
  * @property-read string      $baseName       Base name for the update stream file on the remote server.
- * @property-read string[]    $formats        Update formats, one or more of xml, ini, and inibare.
+ * @property-read string[]    $formats        Update formats, one or more of xml, ini, inibare and changelog.
+ * @property-read string|null $changelogUrl   Public URL of the uploaded changelog file, written into the XML stream.
  * @property-read Uploader    $uploader       The Uploader object to be used for this update source.
  *
  * @since  2.0.0
@@ -44,6 +46,8 @@ class Source
 
 	private array $formats = [];
 
+	private ?string $changelogUrl;
+
 	private Configuration $parent;
 
 	public function __construct(array $configuration, Configuration $parent)
@@ -55,6 +59,7 @@ class Source
 		$this->directory      = $configuration['directory'] ?? null;
 		$this->baseName       = $configuration['base_name'] ?? sprintf('stream-%s', $this->stream);
 		$this->formats        = $configuration['formats'] ?? ['xml'];
+		$this->changelogUrl   = trim($configuration['changelog_url'] ?? '') ?: null;
 
 		if ($this->stream <= 0)
 		{
@@ -75,10 +80,22 @@ class Source
 
 		foreach ($this->formats as $format)
 		{
-			if (!in_array($format, ['xml', 'ini', 'inibare']))
+			if (!in_array($format, ['xml', 'ini', 'inibare', 'changelog']))
 			{
 				throw new InvalidUpdateFormat($format);
 			}
+		}
+
+		// Joomla doesn't resolve relative URLs and opens an empty modal for anything but an HTTP 200.
+		if (
+			$this->changelogUrl !== null
+			&& (
+				!filter_var($this->changelogUrl, FILTER_VALIDATE_URL)
+				|| !in_array(strtolower(parse_url($this->changelogUrl, PHP_URL_SCHEME) ?: ''), ['http', 'https'])
+			)
+		)
+		{
+			throw new InvalidChangelogUrl($this->changelogUrl);
 		}
 	}
 
